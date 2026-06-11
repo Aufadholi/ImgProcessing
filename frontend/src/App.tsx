@@ -61,9 +61,11 @@ export default function App() {
   // local object-URL for instant image preview before upload
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // snapshot of the final job data when processing completes/fails
+  const [finalJob, setFinalJob] = useState<import('./api').JobResponse | null>(null);
 
   const { job, pollingError } = useJobPolling(
-    appState === "polling" || appState === "done" ? jobId : null
+    appState === "polling" ? jobId : null
   );
 
   useEffect(() => {
@@ -72,6 +74,7 @@ export default function App() {
       (job.status === "completed" || job.status === "failed") &&
       appState === "polling"
     ) {
+      setFinalJob(job);
       setAppState("done");
     }
   }, [job, appState]);
@@ -117,6 +120,7 @@ export default function App() {
     setJobId(null);
     setUploadError(null);
     setSelectedFile(null);
+    setFinalJob(null);
     setPreviewUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -489,25 +493,25 @@ export default function App() {
             )}
 
             {/* ── STATE: DONE ── */}
-            {appState === "done" && job && (
+            {appState === "done" && finalJob && (
               <div className="space-y-4">
 
                 {/* Status badge */}
                 <div className="flex items-center gap-2">
-                  <span className={statusConfig[job.status].badgeClass}>
+                  <span className={statusConfig[finalJob.status].badgeClass}>
                     <span
                       className="w-1.5 h-1.5 rounded-full"
                       style={{
-                        background: statusConfig[job.status].dot,
-                        boxShadow: `0 0 6px ${statusConfig[job.status].dot}`,
+                        background: statusConfig[finalJob.status].dot,
+                        boxShadow: `0 0 6px ${statusConfig[finalJob.status].dot}`,
                       }}
                     />
-                    {statusConfig[job.status].label}
+                    {statusConfig[finalJob.status].label}
                   </span>
                 </div>
 
                 {/* Comparison slider — only when completed */}
-                {job.status === "completed" && jobId && (
+                {finalJob.status === "completed" && jobId && (
                   <>
                     <p
                       className="text-[11px] uppercase tracking-widest text-center"
@@ -522,8 +526,39 @@ export default function App() {
                   </>
                 )}
 
+                {/* File size comparison */}
+                {finalJob.status === "completed" && finalJob.originalSize != null && finalJob.processedSize != null && (
+                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.07] px-4 py-3 flex justify-between text-xs">
+                    <div className="text-center">
+                      <p className="text-slate-500 uppercase tracking-widest mb-1">Original</p>
+                      <p className="font-semibold" style={{ color: "#fde047" }}>
+                        {(finalJob.originalSize / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <div className="flex items-center" style={{ color: "rgba(168,85,247,0.5)" }}>→</div>
+                    <div className="text-center">
+                      <p className="text-slate-500 uppercase tracking-widest mb-1">WebP</p>
+                      <p className="font-semibold" style={{ color: "#86efac" }}>
+                        {(finalJob.processedSize / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <div className="flex items-center">
+                      <span
+                        className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                        style={{
+                          background: "rgba(134,239,172,0.12)",
+                          border: "1px solid rgba(134,239,172,0.25)",
+                          color: "#86efac",
+                        }}
+                      >
+                        -{Math.round((1 - finalJob.processedSize / finalJob.originalSize) * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Download button */}
-                {job.status === "completed" && jobId && (
+                {finalJob.status === "completed" && jobId && (
                   <button
                     onClick={() => window.open(getDownloadUrl(jobId), "_blank")}
                     className="btn-download flex items-center justify-center gap-2 w-full py-3 rounded-2xl text-sm font-semibold text-white tracking-wide"
@@ -546,14 +581,14 @@ export default function App() {
                 )}
 
                 {/* Failed */}
-                {job.status === "failed" && (
+                {finalJob.status === "failed" && (
                   <div className="rounded-xl bg-red-900/20 border border-red-500/20 px-4 py-3">
                     <p className="text-sm font-medium text-red-400">
                       Pemrosesan gagal
                     </p>
-                    {job.errorMessage && (
+                    {finalJob.errorMessage && (
                       <p className="text-xs text-red-500/70 mt-1">
-                        {job.errorMessage}
+                        {finalJob.errorMessage}
                       </p>
                     )}
                   </div>

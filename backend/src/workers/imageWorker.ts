@@ -1,5 +1,6 @@
 import { Worker } from "bullmq";
 import path from "path";
+import fs from "fs";
 
 import { redisConfig } from "../config/redis";
 
@@ -49,12 +50,14 @@ const worker = new Worker(
         outputFile
       );
 
+      const { size: processedSize } = fs.statSync(outputFile);
+
       await updateJob(
         jobId,
         {
           status: "completed",
-          processedFile:
-            `${jobId}.webp`
+          processedFile: `${jobId}.webp`,
+          processedSize
         }
       );
     } catch (err) {

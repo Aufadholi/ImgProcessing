@@ -10,4 +10,6 @@ export interface Job {
   processedFile?: string;
   errorMessage?: string;
   status: JobStatus;
+  originalSize?: number;
+  processedSize?: number;
 }

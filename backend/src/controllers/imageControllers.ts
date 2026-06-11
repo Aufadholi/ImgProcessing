@@ -24,7 +24,8 @@ export const uploadImage = async (
   await createJob({
     jobId,
     originalFile: req.file.filename,
-    status: "pending"
+    status: "pending",
+    originalSize: req.file.size,
   });
 
   await imageQueue.add(
@@ -35,13 +36,6 @@ export const uploadImage = async (
         req.file.filename
     }
 
-  );
-
-  const queueCount = await imageQueue.count();
-
-  console.log(
-    "QUEUE COUNT:",
-    queueCount
   );
 
   return res.status(201).json({

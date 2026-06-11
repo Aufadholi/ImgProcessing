@@ -8,6 +8,8 @@ export interface JobResponse {
     originalFile: string;
     processedFile?: string;
     errorMessage?: string;
+    originalSize?: number;
+    processedSize?: number;
 }
 
 export const uploadImage = async (file: File): Promise<JobResponse> => {
