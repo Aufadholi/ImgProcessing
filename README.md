@@ -99,9 +99,9 @@ This starts **4 services** in the correct dependency order:
 | `redis`    | Redis 7 — job queue & state store              | 6379  |
 | `backend`  | Express API server                             | 3001  |
 | `worker`   | BullMQ worker — processes images               | —     |
-| `frontend` | React app served by Nginx                      | 80    |
+| `frontend` | React app served by Nginx                      | 5173  |
 
-Open your browser at **http://localhost**
+Open your browser at **http://localhost:5173**
 
 ---
 
@@ -198,7 +198,7 @@ The result screen shows:
 | `PORT`        | `3001`                                  | Port the Express server listens on                                      |
 | `REDIS_HOST`  | `redis` (Docker) / `localhost` (dev)    | Redis hostname — use `redis` inside the Docker Compose network          |
 | `REDIS_PORT`  | `6379`                                  | Redis port                                                              |
-| `CORS_ORIGIN` | `http://localhost`                      | Allowed CORS origin (must match the frontend URL)                       |
+| `CORS_ORIGIN` | `http://localhost:5173`              | Allowed CORS origin (must match the frontend URL)                       |
 
 ### Frontend (`frontend/.env`)
 
@@ -227,6 +227,46 @@ cd frontend
 npm install
 npm run dev
 ```
+
+---
+
+## Running E2E Tests
+
+End-to-end tests use **Playwright** (Chromium) and run against the live Docker stack.
+All 3 tests pass in ~2 seconds once the stack is up.
+
+### Prerequisites
+
+The Docker stack must be running before you start the tests:
+
+```bash
+docker compose up -d
+```
+
+### Setup and run
+
+```bash
+cd e2e
+npm install
+npx playwright install chromium  # one-time: downloads the Chromium binary
+npm test
+```
+
+> To watch the browser while tests run, open `e2e/playwright.config.ts` and set `headless: false`.
+
+### What is tested
+
+| Test | What it verifies |
+|---|---|
+| **Happy path** | Upload a real PNG → worker processes it → "Selesai" badge and Download button appear |
+| **Format validation** | Uploading a `.txt` file shows the format error and disables the upload button |
+| **Size validation** | Uploading a file > 20 MB shows the size error and disables the upload button |
+
+### Notable implementation details
+
+- **`{ force: true }` on click** — The upload button lives inside a `div` with `animation: floatCard infinite`. Playwright considers continuously moving elements "not stable" and refuses to click them. `force: true` bypasses this stability check.
+- **Two-step assertion for the happy path** — The test first waits for *either* `selesai` or `gagal` to appear (fast termination on failure), then asserts it is specifically `selesai`. This avoids a silent 60-second timeout if the job fails.
+- **PNG fixture from sharp** — The test PNG is embedded as a base64 string produced by the real `sharp` library (run inside the backend Docker container). Hand-crafted PNG hex is error-prone because every chunk requires an exact CRC-32 checksum; an invalid PNG causes the worker to fail the job instead of completing it.
 
 ---
 
@@ -297,6 +337,7 @@ When polling detects a `"completed"` job, the full job data (including `original
 | ✅ Interactive image comparison slider | Drag to reveal original vs. WebP after processing completes |
 | ✅ File size comparison | Displays original size, WebP size, and percentage saved |
 | ✅ Instant local preview | `URL.createObjectURL` for immediate image preview before upload |
+| ✅ Playwright E2E tests | 3 tests: happy path, format validation, size validation — all passing |
 | ✅ Architectural decisions documented | See section above |
 
 ---
@@ -345,6 +386,16 @@ img-processing-web/
 │   ├── nginx.conf                  # SPA routing + gzip + asset caching
 │   ├── .env.example
 │   └── Dockerfile                  # Multi-stage: Node (build) → Nginx (serve)
+│
+├── e2e/
+│   ├── tests/
+│   │   ├── fixtures/               # Auto-generated test assets (gitignored)
+│   │   │   ├── test.png            # Valid 100×100 PNG (base64 from sharp)
+│   │   │   └── large.png           # 21 MB dummy file for size validation
+│   │   └── upload.spec.ts          # 3 Playwright tests: happy path, format, size
+│   ├── playwright.config.ts        # baseURL: localhost:5173, timeout: 60s, Chromium
+│   ├── tsconfig.json               # TypeScript config for e2e workspace
+│   └── package.json                # @playwright/test + @types/node
 │
 ├── docker-compose.yaml             # 4 services: redis, backend, worker, frontend
 ├── .gitignore
