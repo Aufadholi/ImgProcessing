@@ -1,7 +1,45 @@
 services:
-
   redis:
     image: redis:7-alpine
     container_name: redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: backend
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CORS_ORIGIN: http://localhost:5173
+    volumes:
+      - uploads_data:/app/uploads
+      - processed_data:/app/processed
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    container_name: worker
+    command: ["node", "dist/workers/imageWorker.js"]
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - uploads_data:/app/uploads
+      - processed_data:/app/processed
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  uploads_data:
+  processed_data:

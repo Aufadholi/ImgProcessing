@@ -8,9 +8,7 @@ export const processImage =
   ) => {
 
     await sharp(inputFile)
-      .resize({
-        width: 800
-      })
+      .resize(1280, 1280, { fit: "inside", withoutEnlargement: true })
       .webp({
         quality: 80
       })

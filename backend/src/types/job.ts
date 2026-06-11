@@ -8,5 +8,6 @@ export interface Job {
   jobId: string;
   originalFile: string;
   processedFile?: string;
+  errorMessage?: string;
   status: JobStatus;
 }

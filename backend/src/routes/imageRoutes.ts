@@ -36,10 +36,10 @@ router.post(
 
 /**
  * JOB STATUS
- * GET /api/jobs/:id
+ * GET /api/images/status/:id
  */
 router.get(
-  "/jobs/:id",
+  "/status/:id",
   getJobStatus
 );
 

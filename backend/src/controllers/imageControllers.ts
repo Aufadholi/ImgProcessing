@@ -21,7 +21,7 @@ export const uploadImage = async (
 
   const jobId = uuidv4();
 
-  createJob({
+  await createJob({
     jobId,
     originalFile: req.file.filename,
     status: "pending"
@@ -50,7 +50,7 @@ console.log(
   });
 };
 
-export const getJobStatus = (
+export const getJobStatus = async (
   req: Request,
   res: Response
 ) => {
@@ -62,7 +62,7 @@ if (!id || Array.isArray(id)) {
   });
 }
 
-const job = getJob(id);
+const job = await getJob(id);
 
   if (!job) {
     return res.status(404).json({
@@ -73,7 +73,7 @@ const job = getJob(id);
   return res.json(job);
 };
 
-export const downloadImage = (
+export const downloadImage = async (
   req: Request,
   res: Response
 ) => {
@@ -85,7 +85,7 @@ if (!id || Array.isArray(id)) {
   });
 }
 
-const job = getJob(id);
+const job = await getJob(id);
 
   if (!job) {
     return res.status(404).json({

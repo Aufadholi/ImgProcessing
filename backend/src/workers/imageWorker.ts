@@ -11,7 +11,7 @@ import {
   updateJob
 } from "../services/jobService";
 
-new Worker(
+const worker = new Worker(
   "image-processing",
 
   async (job) => {
@@ -22,7 +22,7 @@ new Worker(
       filename
     } = job.data;
 
-    updateJob(
+    await updateJob(
       jobId,
       {
         status: "processing"
@@ -43,25 +43,37 @@ new Worker(
         `${jobId}.webp`
       );
 
-    await processImage(
-      inputFile,
-      outputFile
-    );
+    try {
+      await processImage(
+        inputFile,
+        outputFile
+      );
 
-    updateJob(
-      jobId,
-      {
-        status: "completed",
-        processedFile:
-          `${jobId}.webp`
-      }
-    );
+      await updateJob(
+        jobId,
+        {
+          status: "completed",
+          processedFile:
+            `${jobId}.webp`
+        }
+      );
+    } catch (err) {
+      await updateJob(jobId, {
+        status: "failed",
+        errorMessage: err instanceof Error ? err.message : "Unknown error",
+      });
+      throw err; // re-throw agar BullMQ juga mencatat job sebagai failed
+    }
   },
 
   {
     connection: redisConfig
   }
 );
+
+worker.on("failed", (job, err) => {
+  console.error(`[Worker] BullMQ job ${job?.id} failed:`, err.message);
+});
 
 console.log(
   "Worker started"
