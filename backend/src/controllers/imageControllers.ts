@@ -28,21 +28,21 @@ export const uploadImage = async (
   });
 
   await imageQueue.add(
-  "resize-image",
-  {
-    jobId,
-    filename:
-      req.file.filename
-  }
-  
-);
+    "resize-image",
+    {
+      jobId,
+      filename:
+        req.file.filename
+    }
 
-const queueCount = await imageQueue.count();
+  );
 
-console.log(
-  "QUEUE COUNT:",
-  queueCount
-);
+  const queueCount = await imageQueue.count();
+
+  console.log(
+    "QUEUE COUNT:",
+    queueCount
+  );
 
   return res.status(201).json({
     jobId,
@@ -56,13 +56,13 @@ export const getJobStatus = async (
 ) => {
   const id = req.params.id;
 
-if (!id || Array.isArray(id)) {
-  return res.status(400).json({
-    message: "Invalid job id"
-  });
-}
+  if (!id || Array.isArray(id)) {
+    return res.status(400).json({
+      message: "Invalid job id"
+    });
+  }
 
-const job = await getJob(id);
+  const job = await getJob(id);
 
   if (!job) {
     return res.status(404).json({
@@ -79,13 +79,13 @@ export const downloadImage = async (
 ) => {
   const id = req.params.id;
 
-if (!id || Array.isArray(id)) {
-  return res.status(400).json({
-    message: "Invalid job id"
-  });
-}
+  if (!id || Array.isArray(id)) {
+    return res.status(400).json({
+      message: "Invalid job id"
+    });
+  }
 
-const job = await getJob(id);
+  const job = await getJob(id);
 
   if (!job) {
     return res.status(404).json({
@@ -93,10 +93,8 @@ const job = await getJob(id);
     });
   }
 
-  if (!job.processedFile) {
-    return res.status(400).json({
-      message: "File not ready"
-    });
+  if (job.status !== "completed" || !job.processedFile) {
+    return res.status(400).json({ message: "File not ready yet" });
   }
 
   const filePath = path.join(

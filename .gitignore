@@ -9,7 +9,7 @@ build/
 .env
 .env.local
 
-# runtime files (INI PENTING)
+# runtime files 
 backend/uploads/
 backend/processed/
 
