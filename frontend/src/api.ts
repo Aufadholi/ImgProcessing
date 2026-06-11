@@ -40,3 +40,6 @@ export const getJobStatus = async (jobId: string): Promise<JobResponse> => {
 
 export const getDownloadUrl = (jobId: string): string =>
     `${BASE_URL}/api/images/download/${jobId}`;
+
+export const getOriginalUrl = (jobId: string): string =>
+    `${BASE_URL}/api/images/original/${jobId}`;

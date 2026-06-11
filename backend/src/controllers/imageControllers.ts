@@ -111,3 +111,32 @@ export const downloadImage = async (
 
   return res.download(filePath);
 };
+
+export const serveOriginalImage = async (
+  req: Request,
+  res: Response
+) => {
+  const id = req.params.id;
+
+  if (!id || Array.isArray(id)) {
+    return res.status(400).json({ message: "Invalid job id" });
+  }
+
+  const job = await getJob(id);
+
+  if (!job) {
+    return res.status(404).json({ message: "Job not found" });
+  }
+
+  const filePath = path.join(
+    process.cwd(),
+    "uploads",
+    job.originalFile
+  );
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ message: "Original file missing" });
+  }
+
+  return res.sendFile(filePath);
+};

@@ -5,7 +5,8 @@ import { upload } from "../middleware/uploadMiddleware";
 import {
   uploadImage,
   getJobStatus,
-  downloadImage
+  downloadImage,
+  serveOriginalImage
 } from "../controllers/imageControllers";
 
 const router = Router();
@@ -44,12 +45,21 @@ router.get(
 );
 
 /**
- * DOWNLOAD RESULT
+ * DOWNLOAD RESULT (processed WebP)
  * GET /api/download/:id
  */
 router.get(
   "/download/:id",
   downloadImage
+);
+
+/**
+ * SERVE ORIGINAL IMAGE (for comparison slider)
+ * GET /api/images/original/:id
+ */
+router.get(
+  "/original/:id",
+  serveOriginalImage
 );
 
 export default router;
