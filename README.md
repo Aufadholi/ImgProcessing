@@ -1,36 +1,61 @@
 # CFactory Image Processor
 
-A full-stack web application that accepts image uploads, delegates processing to a background worker, and allows users to download the result once the job is complete.
+A full-stack web application that accepts image uploads, processes them in the background, and lets users download the result as a much smaller **WebP** file.
 
-Built with **React + Vite + Tailwind CSS** (frontend), **Express + TypeScript** (backend), **BullMQ + Redis** (job queue), and **Docker Compose** for single-command orchestration.
+Built with **React + Vite** (frontend), **Express + TypeScript** (backend), **BullMQ + Redis** (job queue), and **Docker Compose** for single-command orchestration.
 
 ---
 
-## Architecture Overview
+## What Does This App Do?
+
+Imagine you have a large photo (e.g. a 5 MB PNG). This app will:
+
+1. **Accept the upload** from your browser
+2. **Queue the processing job** to a background worker (without blocking the server)
+3. **Process the image** — resize to max 1280px, compress, and convert to WebP
+4. **Show a before/after comparison** (drag slider) along with a **file size comparison** (e.g. 5 MB → 0.07 MB, 97% smaller)
+5. **Provide a download button** to save the resulting WebP file
+
+---
+
+## System Architecture
 
 ```
 Browser (React)
     │
-    │  POST /api/images/upload
-    ▼
+    │  1. POST /api/images/upload  → server responds immediately with jobId
+    ▼                                 (does NOT wait for processing to finish)
 Express Server (backend)
-    │  creates job in Redis
-    │  enqueues job to BullMQ
-    │  returns { jobId } immediately ← does NOT wait for processing
+    │  2. Save job info to Redis (status: "pending", originalSize)
+    │  3. Enqueue job to BullMQ
     │
-    │  GET /api/images/status/:id
-    │  GET /api/images/download/:id
+    │  4. GET /api/images/status/:id  ← browser polls every few seconds
+    │  5. GET /api/images/download/:id
+    │  6. GET /api/images/original/:id
     │
-BullMQ Queue (Redis)
+BullMQ Queue (stored in Redis)
     │
     ▼
 Worker Process (separate container)
-    │  dequeues job
-    │  resizes → compresses → converts to WebP (via sharp)
-    │  updates job status in Redis
+    │  7. Dequeue job from BullMQ
+    │  8. Read file from uploads/ volume
+    │  9. Process: resize → compress → convert to WebP (using sharp)
+    │  10. Save result to processed/ volume
+    │  11. Update job status in Redis → "completed" + processedSize
 ```
 
 **Job lifecycle:** `pending` → `processing` → `completed` / `failed`
+
+### Why 4 separate containers?
+
+| Container  | Responsibility                                              |
+|------------|-------------------------------------------------------------|
+| `redis`    | Shared store for job state and the BullMQ queue             |
+| `backend`  | Handles browser requests, reads/writes job state            |
+| `worker`   | Dedicated image processing in the background                |
+| `frontend` | Serves the React app via Nginx                              |
+
+The server (`backend`) and the image processor (`worker`) are separated so the server stays fast and responsive — image processing can take several seconds and must never block the server.
 
 ---
 
@@ -67,38 +92,98 @@ cp frontend/.env.example frontend/.env
 docker compose up --build
 ```
 
-This starts **4 services** in the correct order:
+This starts **4 services** in the correct dependency order:
 
-| Service    | Description                          | Port  |
-|------------|--------------------------------------|-------|
-| `redis`    | Redis 7 — job queue & state store    | 6379  |
-| `backend`  | Express API server                   | 3001  |
-| `worker`   | BullMQ worker — processes images     | —     |
-| `frontend` | React app served by Nginx            | 5173  |
+| Service    | Description                                    | Port  |
+|------------|------------------------------------------------|-------|
+| `redis`    | Redis 7 — job queue & state store              | 6379  |
+| `backend`  | Express API server                             | 3001  |
+| `worker`   | BullMQ worker — processes images               | —     |
+| `frontend` | React app served by Nginx                      | 80    |
 
-Open your browser at **http://localhost:5173**
+Open your browser at **http://localhost**
+
+---
+
+## Full Workflow — Step by Step
+
+### Step 1: User uploads an image
+
+- The user selects or drags-and-drops an image (JPG / PNG / WebP, max 20 MB)
+- The browser shows an **instant local preview** using `URL.createObjectURL` — the image appears before the upload even starts
+- The user clicks **"Upload & Process"**
+
+### Step 2: Server receives the upload
+
+- The backend receives the file via `multipart/form-data`
+- The Multer middleware validates file type and size
+- The server creates a job entry in Redis:
+  ```json
+  {
+    "jobId": "...",
+    "status": "pending",
+    "originalFile": "...",
+    "originalSize": 2599282
+  }
+  ```
+- The server immediately responds with `{ jobId }` — **without waiting** for processing to finish
+
+### Step 3: Frontend starts polling
+
+- Once the `jobId` is received, the frontend **polls the status** endpoint periodically
+- The polling interval uses **exponential backoff**: 1s → 2s → 4s → 8s → 16s (max)
+- Polling **stops automatically** when the status is `completed` or `failed`
+
+### Step 4: Worker processes the image
+
+Inside the separate `worker` container:
+
+1. Dequeue the job from BullMQ
+2. Update job status in Redis → `"processing"`
+3. Read the file from `/app/uploads/`
+4. Process using **sharp**:
+   - Resize to max 1280×1280px (aspect ratio preserved, no upscaling for small images)
+   - Compress at 80% quality
+   - Convert to WebP format
+5. Save the result to `/app/processed/<jobId>.webp`
+6. Update job status in Redis → `"completed"` + store `processedSize`
+
+### Step 5: Displaying the result
+
+When polling detects `status: "completed"`, the full job data is **immediately snapshot into a `finalJob` state** before the UI transitions to the result screen. This prevents data from being lost due to React re-render timing.
+
+The result screen shows:
+- **Status badge** (Completed / Failed)
+- **Image comparison slider** — drag to reveal original vs. WebP side by side
+- **File size comparison**:
+  ```
+  Original: 2.48 MB  →  WebP: 0.07 MB  [-97%]
+  ```
+- **Download button** for the processed WebP file
 
 ---
 
 ## API Endpoints
 
-| Method | Endpoint                         | Description                      |
-|--------|----------------------------------|----------------------------------|
-| `GET`  | `/health`                        | Health check                     |
-| `POST` | `/api/images/upload`             | Upload image, returns `jobId`    |
-| `GET`  | `/api/images/status/:id`         | Poll job status by `jobId`       |
-| `GET`  | `/api/images/download/:id`       | Download processed WebP image    |
-| `GET`  | `/api/images/original/:id`       | Serve original uploaded image (for comparison UI) |
+| Method | Endpoint                         | Description                                            |
+|--------|----------------------------------|--------------------------------------------------------|
+| `GET`  | `/health`                        | Server health check                                    |
+| `POST` | `/api/images/upload`             | Upload an image, returns `jobId`                       |
+| `GET`  | `/api/images/status/:id`         | Poll job status by `jobId`                             |
+| `GET`  | `/api/images/download/:id`       | Download the processed WebP image                      |
+| `GET`  | `/api/images/original/:id`       | Serve the original uploaded image (for comparison UI)  |
 
-**Upload request:** `multipart/form-data`, field name `image`, max 20MB, formats: JPG / PNG / WebP.
+**Upload request:** `multipart/form-data`, field name `image`, max 20 MB, formats: JPG / PNG / WebP.
 
-**Status response example:**
+**Example status response (completed job):**
 ```json
 {
-  "jobId": "8de5167e-7738-4468-afe0-61276eec2f8b",
+  "jobId": "4eb44926-5ccb-4dd6-b29c-8155278e164f",
   "status": "completed",
-  "originalFile": "1749601234-523847123.png",
-  "processedFile": "8de5167e-7738-4468-afe0-61276eec2f8b.webp"
+  "originalFile": "1781159862722-333196493.png",
+  "processedFile": "4eb44926-5ccb-4dd6-b29c-8155278e164f.webp",
+  "originalSize": 2599282,
+  "processedSize": 69858
 }
 ```
 
@@ -108,17 +193,17 @@ Open your browser at **http://localhost:5173**
 
 ### Backend (`backend/.env`)
 
-| Variable      | Default                   | Description                                              |
-|---------------|---------------------------|----------------------------------------------------------|
-| `PORT`        | `3001`                    | Port the Express server listens on                       |
-| `REDIS_HOST`  | `redis` (Docker) / `localhost` (local dev) | Redis hostname — use `redis` inside Docker Compose network |
-| `REDIS_PORT`  | `6379`                    | Redis port                                               |
-| `CORS_ORIGIN` | `http://localhost:5173`   | Allowed CORS origin (must match frontend URL)            |
+| Variable      | Default                                 | Description                                                             |
+|---------------|-----------------------------------------|-------------------------------------------------------------------------|
+| `PORT`        | `3001`                                  | Port the Express server listens on                                      |
+| `REDIS_HOST`  | `redis` (Docker) / `localhost` (dev)    | Redis hostname — use `redis` inside the Docker Compose network          |
+| `REDIS_PORT`  | `6379`                                  | Redis port                                                              |
+| `CORS_ORIGIN` | `http://localhost`                      | Allowed CORS origin (must match the frontend URL)                       |
 
 ### Frontend (`frontend/.env`)
 
-| Variable       | Default                  | Description                                                                 |
-|----------------|--------------------------|-----------------------------------------------------------------------------|
+| Variable       | Default                  | Description                                                                                      |
+|----------------|--------------------------|--------------------------------------------------------------------------------------------------|
 | `VITE_API_URL` | `http://localhost:3001`  | Backend base URL. Always points to `localhost` — accessed from the browser, not from inside Docker |
 
 ---
@@ -147,37 +232,35 @@ npm run dev
 
 ## Image Processing Pipeline
 
-The background worker processes images in this exact order:
+The background worker processes images in this exact order using the **sharp** library:
 
-1. **Resize** — to a maximum of 1280px on the longest side, preserving aspect ratio (`fit: "inside"`, no upscaling)
-2. **Compress** — to 80% quality
+1. **Resize** — to a maximum of 1280px on the longest side, preserving aspect ratio (`fit: "inside"`, no upscaling if the image is already smaller)
+2. **Compress** — at 80% quality
 3. **Convert** — to WebP format
 
-Processed files are stored in `backend/processed/` and shared between the `backend` and `worker` containers via a Docker named volume.
+Processed files are stored in `backend/processed/` and shared between the `backend` and `worker` containers via Docker named volumes.
 
 ---
 
 ## Architectural Decisions
 
-### Why BullMQ + Redis (not in-memory Map or database polling)?
+### Why BullMQ + Redis (not an in-memory Map or database polling)?
 
-The initial implementation stored job state in an in-memory `Map`. This breaks the moment **server and worker run in separate processes** (as they do in Docker), because each process has its own memory — there is no way for the server to read what the worker wrote.
+The initial implementation stored job state in an in-memory JavaScript `Map`. This breaks the moment **the server and worker run as separate processes** (as they do in Docker), because each process has its own memory space — what the worker writes is invisible to the server.
 
 Redis solves this: it is a **shared, external state store** accessible by any process or container that knows the Redis host. BullMQ adds a reliable queue on top of Redis with:
 - **Automatic retries** if the worker crashes mid-job
-- **Job deduplication** and visibility guarantees
+- **Job visibility guarantees** (no job silently disappears)
 - **Exponential backoff** support out of the box
 
-Alternative approaches like polling a SQL/NoSQL database would also work, but BullMQ + Redis is purpose-built for this pattern (queue + ephemeral state) and adds no schema overhead.
-
-### Why are server and worker separated into different processes?
+### Why are the server and worker separated into different processes?
 
 The Express server's job is to **respond fast**. Image processing (resize, compress, encode) is CPU-intensive and can take several seconds. If the server did the processing synchronously, every upload request would block the event loop and make the API unresponsive for all other users.
 
-Separating the worker into its own process means:
-- The server returns `{ jobId }` **immediately** (< 50ms) — the user is not left waiting
-- The worker runs in isolation — a crash in the worker does not take down the API server
-- In production, you can scale workers independently (run 4 workers, 1 server)
+Separating the worker means:
+- The server returns `{ jobId }` **immediately** (< 50ms) — the user is never left waiting
+- A worker crash does not take down the API server
+- In production, workers can be scaled independently (e.g. 4 workers, 1 server)
 
 In Docker Compose, this is reflected as two separate services (`backend` and `worker`) built from the same image but started with different commands:
 - `backend` → `node dist/server.js`
@@ -187,23 +270,33 @@ In Docker Compose, this is reflected as two separate services (`backend` and `wo
 
 The `uploads/` and `processed/` directories must be **shared between two containers** (`backend` writes uploads, `worker` reads them; `worker` writes processed files, `backend` serves them for download).
 
-Docker **named volumes** (`uploads_data`, `processed_data`) are managed by Docker and guaranteed to exist independently of the container lifecycle:
+Docker **named volumes** (`uploads_data`, `processed_data`) are managed by Docker and exist independently of the container lifecycle:
 - If a container restarts, the files are still there
 - Both containers mount the same volume → same filesystem view
-- No path dependency on the host OS (unlike bind mounts which require an absolute host path)
+- No dependency on a specific host OS path (unlike bind mounts)
+
+### Why use a `finalJob` state snapshot in the frontend?
+
+When polling detects a `"completed"` job, the full job data (including `originalSize` and `processedSize`) is snapshot into a dedicated `finalJob` state before `appState` transitions to `"done"`. This matters because:
+
+- When `appState` changes, the `useJobPolling` hook stops receiving a `jobId`
+- Without the snapshot, React can reset the `job` state from the hook back to `null` during re-render
+- `finalJob` guarantees that the file size comparison data is always available on the result screen, immune to re-render timing issues
 
 ---
 
-## Bonus Features Implemented
+## Features Implemented
 
 | Feature | Implementation |
 |---|---|
 | ✅ Docker Compose — single command for full stack | `docker compose up --build` runs all 4 services |
-| ✅ Graceful worker failure handling | `try/catch` in worker updates status to `failed` + stores `errorMessage` in Redis; BullMQ `worker.on("failed")` logs the error; job is re-thrown so BullMQ marks it failed |
-| ✅ Efficient polling — exponential backoff | Frontend polls at 1s → 2s → 4s → 8s → 16s (max). Stops immediately when status is `completed` or `failed` |
-| ✅ Premium UI / UX | Cosmic-themed glassmorphism interface with animated radar background using CFactory brand colors (Purple/Yellow/Red) |
-| ✅ Interactive Image Comparison | Drag-to-reveal before/after slider once processing completes (original vs WebP) |
-| ✅ Instant Local Preview | `URL.createObjectURL` for immediate image preview before upload |
+| ✅ Graceful worker failure handling | `try/catch` in worker updates status to `"failed"` + stores `errorMessage` in Redis |
+| ✅ Efficient polling — exponential backoff | Frontend polls at 1s → 2s → 4s → 8s → 16s (max). Stops when `completed` or `failed` |
+| ✅ Safe state snapshot (`finalJob`) | Prevents `originalSize`/`processedSize` from being lost due to React re-render timing |
+| ✅ Premium UI / Cosmic Theme | Glassmorphism interface with animated starfield background and CFactory brand colors |
+| ✅ Interactive image comparison slider | Drag to reveal original vs. WebP after processing completes |
+| ✅ File size comparison | Displays original size, WebP size, and percentage saved |
+| ✅ Instant local preview | `URL.createObjectURL` for immediate image preview before upload |
 | ✅ Architectural decisions documented | See section above |
 
 ---
@@ -219,9 +312,9 @@ img-processing-web/
 │   │   ├── config/
 │   │   │   └── redis.ts            # Redis connection config (env-aware)
 │   │   ├── controllers/
-│   │   │   └── imageControllers.ts # Upload, status, download handlers
+│   │   │   └── imageControllers.ts # Handlers: upload, status, download, original
 │   │   ├── middleware/
-│   │   │   └── uploadMiddleware.ts # Multer config (type/size validation)
+│   │   │   └── uploadMiddleware.ts # Multer config (type & size validation)
 │   │   ├── queues/
 │   │   │   └── imageQueue.ts       # BullMQ queue definition
 │   │   ├── routes/
@@ -230,7 +323,7 @@ img-processing-web/
 │   │   │   ├── imageProcessor.ts   # sharp: resize → compress → WebP
 │   │   │   └── jobService.ts       # Redis CRUD for job state
 │   │   ├── types/
-│   │   │   └── job.ts              # Job type definition
+│   │   │   └── job.ts              # Job type (jobId, status, originalSize, processedSize, etc.)
 │   │   └── workers/
 │   │       └── imageWorker.ts      # BullMQ worker process
 │   ├── .env.example
@@ -238,15 +331,17 @@ img-processing-web/
 │   └── tsconfig.json               # strict: true
 │
 ├── frontend/
+│   ├── index.html                  # HTML entry point, title: "CFactory Image Processing"
 │   ├── src/
-│   │   ├── api.ts                  # fetch wrappers for all endpoints
-│   │   ├── App.tsx                 # Main UI (upload → poll → download)
-│   │   ├── components/             # UI Components (Slider, Background)
-│   │   │   ├── BackgroundCircles.tsx
-│   │   │   └── ImageComparisonSlider.tsx
+│   │   ├── api.ts                  # Fetch wrappers for all API endpoints
+│   │   ├── App.tsx                 # Main UI: upload → polling → result display
+│   │   │                           # (uses finalJob snapshot for reliable result data)
+│   │   ├── components/
+│   │   │   ├── BackgroundCircles.tsx      # Animated concentric circles behind the card
+│   │   │   └── ImageComparisonSlider.tsx  # Drag-to-reveal before/after slider
 │   │   ├── hooks/
-│   │   │   └── useJobPolling.ts    # Exponential backoff polling hook
-│   │   └── index.css               # Tailwind directives
+│   │   │   └── useJobPolling.ts    # Polling hook with exponential backoff
+│   │   └── index.css               # Global CSS + starfield animation
 │   ├── nginx.conf                  # SPA routing + gzip + asset caching
 │   ├── .env.example
 │   └── Dockerfile                  # Multi-stage: Node (build) → Nginx (serve)
