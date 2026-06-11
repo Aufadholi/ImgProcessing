@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { uploadImage, getDownloadUrl } from "./api";
 import type { JobResponse } from "./api";
 import { useJobPolling } from "./hooks/useJobPolling";
@@ -22,9 +22,11 @@ export default function App() {
   );
 
   // Kalau polling sudah dapat status final, pindah ke state "done"
-  if (job && (job.status === "completed" || job.status === "failed") && appState === "polling") {
-    setAppState("done");
-  }
+  useEffect(() => {
+    if (job && (job.status === "completed" || job.status === "failed") && appState === "polling") {
+      setAppState("done");
+    }
+  }, [job, appState]);
 
   const validateFile = (file: File): string | null => {
     if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -268,6 +270,6 @@ export default function App() {
           </div>
         )}
       </div>
-    </div >
+    </div>
   );
 }

@@ -28,7 +28,7 @@ export const uploadImage = async (file: File): Promise<JobResponse> => {
 };
 
 export const getJobStatus = async (jobId: string): Promise<JobResponse> => {
-    const res = await fetch(`${BASE_URL}/api/images/jobs/${jobId}`);
+    const res = await fetch(`${BASE_URL}/api/images/status/${jobId}`);
 
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
