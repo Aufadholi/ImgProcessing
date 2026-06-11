@@ -1,4 +1,4 @@
-# Image Processing Web Application
+# CFactory Image Processor
 
 A full-stack web application that accepts image uploads, delegates processing to a background worker, and allows users to download the result once the job is complete.
 
@@ -88,6 +88,7 @@ Open your browser at **http://localhost:5173**
 | `POST` | `/api/images/upload`             | Upload image, returns `jobId`    |
 | `GET`  | `/api/images/status/:id`         | Poll job status by `jobId`       |
 | `GET`  | `/api/images/download/:id`       | Download processed WebP image    |
+| `GET`  | `/api/images/original/:id`       | Serve original uploaded image (for comparison UI) |
 
 **Upload request:** `multipart/form-data`, field name `image`, max 20MB, formats: JPG / PNG / WebP.
 
@@ -200,6 +201,9 @@ Docker **named volumes** (`uploads_data`, `processed_data`) are managed by Docke
 | ✅ Docker Compose — single command for full stack | `docker compose up --build` runs all 4 services |
 | ✅ Graceful worker failure handling | `try/catch` in worker updates status to `failed` + stores `errorMessage` in Redis; BullMQ `worker.on("failed")` logs the error; job is re-thrown so BullMQ marks it failed |
 | ✅ Efficient polling — exponential backoff | Frontend polls at 1s → 2s → 4s → 8s → 16s (max). Stops immediately when status is `completed` or `failed` |
+| ✅ Premium UI / UX | Cosmic-themed glassmorphism interface with animated radar background using CFactory brand colors (Purple/Yellow/Red) |
+| ✅ Interactive Image Comparison | Drag-to-reveal before/after slider once processing completes (original vs WebP) |
+| ✅ Instant Local Preview | `URL.createObjectURL` for immediate image preview before upload |
 | ✅ Architectural decisions documented | See section above |
 
 ---
@@ -237,6 +241,9 @@ img-processing-web/
 │   ├── src/
 │   │   ├── api.ts                  # fetch wrappers for all endpoints
 │   │   ├── App.tsx                 # Main UI (upload → poll → download)
+│   │   ├── components/             # UI Components (Slider, Background)
+│   │   │   ├── BackgroundCircles.tsx
+│   │   │   └── ImageComparisonSlider.tsx
 │   │   ├── hooks/
 │   │   │   └── useJobPolling.ts    # Exponential backoff polling hook
 │   │   └── index.css               # Tailwind directives
