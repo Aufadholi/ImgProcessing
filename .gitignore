@@ -21,6 +21,11 @@ yarn-error.log*
 # Postman local config
 .postman/
 
+# E2E fixtures
+e2e/tests/fixtures/large.png
+e2e/test-results/
+e2e/playwright-report/
+
 # OS
 .DS_Store
 Thumbs.db
