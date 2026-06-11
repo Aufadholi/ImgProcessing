@@ -1,4 +1,4 @@
-# CFactory Image Processor
+# Image Processor
 
 A full-stack web application that accepts image uploads, processes them in the background, and lets users download the result as a much smaller **WebP** file.
 
@@ -372,7 +372,7 @@ img-processing-web/
 │   └── tsconfig.json               # strict: true
 │
 ├── frontend/
-│   ├── index.html                  # HTML entry point, title: "CFactory Image Processing"
+│   ├── index.html                  # HTML entry point, title: "Image Processing"
 │   ├── src/
 │   │   ├── api.ts                  # Fetch wrappers for all API endpoints
 │   │   ├── App.tsx                 # Main UI: upload → polling → result display

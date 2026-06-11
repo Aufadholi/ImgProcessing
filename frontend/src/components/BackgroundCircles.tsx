@@ -1,5 +1,5 @@
 // src/components/BackgroundCircles.tsx
-// Animated pulsing concentric circles — CFactory brand: purple · yellow · red
+// Animated pulsing concentric circles
 
 export default function BackgroundCircles() {
   return (

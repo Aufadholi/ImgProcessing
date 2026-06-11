@@ -81,9 +81,9 @@ export default function App() {
 
   const validateFile = (file: File): string | null => {
     if (!ACCEPTED_TYPES.includes(file.type))
-      return "Format tidak didukung. Gunakan JPG, PNG, atau WebP.";
+      return "Unsupported format. Use JPG, PNG, or WebP.";
     if (file.size > MAX_SIZE_BYTES)
-      return `Ukuran file terlalu besar. Maksimal ${MAX_SIZE_MB}MB.`;
+      return `File size is too large. Maximum ${MAX_SIZE_MB}MB.`;
     return null;
   };
 
@@ -110,7 +110,7 @@ export default function App() {
       setJobId(result.jobId);
       setAppState("polling");
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Upload gagal");
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
       setAppState("idle");
     }
   }, [selectedFile]);
@@ -143,10 +143,10 @@ export default function App() {
     JobResponse["status"],
     { label: string; badgeClass: string; dot: string }
   > = {
-    pending: { label: "Menunggu", badgeClass: "badge badge-yellow", dot: "#fde047" },
-    processing: { label: "Memproses", badgeClass: "badge badge-blue", dot: "#93c5fd" },
-    completed: { label: "Selesai", badgeClass: "badge badge-green", dot: "#6ee7b7" },
-    failed: { label: "Gagal", badgeClass: "badge badge-red", dot: "#fca5a5" },
+    pending: { label: "Pending", badgeClass: "badge badge-yellow", dot: "#fde047" },
+    processing: { label: "Processing", badgeClass: "badge badge-blue", dot: "#93c5fd" },
+    completed: { label: "Completed", badgeClass: "badge badge-green", dot: "#6ee7b7" },
+    failed: { label: "Failed", badgeClass: "badge badge-red", dot: "#fca5a5" },
   };
 
   const dropZoneClass = [
@@ -265,7 +265,7 @@ export default function App() {
               letterSpacing: "-0.01em",
             }}
           >
-            CFactory
+            Image Processing
           </h1>
           <p className="text-sm mt-1 font-light" style={{ color: "rgba(216,180,254,0.65)" }}>
             Convert &amp; optimize your images at warp speed
@@ -302,7 +302,7 @@ export default function App() {
                 </h2>
               </div>
               <p className="text-xs text-slate-500 pl-4 leading-relaxed">
-                Upload JPG, PNG, atau WebP — otomatis dikonversi ke WebP 1280px.
+                Upload JPG, PNG, or WebP — automatically converted to 1280px WebP.
               </p>
             </div>
 
@@ -381,13 +381,13 @@ export default function App() {
                         </svg>
                       </div>
                       <p className="text-sm" style={{ color: "rgba(216,180,254,0.70)" }}>
-                        Drag &amp; drop gambar ke sini, atau{" "}
+                        Drag &amp; drop an image here, or{" "}
                         <span className="font-medium" style={{ color: "#fbbf24" }}>
-                          klik untuk pilih
+                          Click here to select
                         </span>
                       </p>
                       <p className="text-xs mt-1" style={{ color: "rgba(168,85,247,0.40)" }}>
-                        JPG · PNG · WebP &mdash; maks. 20 MB
+                        JPG · PNG · WebP &mdash; max. 20 MB
                       </p>
                     </div>
                   )}
@@ -427,10 +427,10 @@ export default function App() {
                           d="M4 12a8 8 0 018-8v8z"
                         />
                       </svg>
-                      Mengunggah...
+                      Uploading...
                     </span>
                   ) : (
-                    "Upload & Proses"
+                    "Upload & Process"
                   )}
                 </button>
               </div>
@@ -485,7 +485,7 @@ export default function App() {
                 {pollingError && (
                   <div className="rounded-xl bg-red-900/20 border border-red-500/20 px-4 py-3">
                     <p className="text-sm text-red-400">
-                      Gagal mengecek status: {pollingError}
+                      Failed to check status: {pollingError}
                     </p>
                   </div>
                 )}
@@ -517,7 +517,7 @@ export default function App() {
                       className="text-[11px] uppercase tracking-widest text-center"
                       style={{ color: "rgba(168,85,247,0.65)" }}
                     >
-                      Geser untuk komparasi
+                      Slide to compare
                     </p>
                     <ImageComparisonSlider
                       beforeUrl={getOriginalUrl(jobId)}
@@ -576,7 +576,7 @@ export default function App() {
                         d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                       />
                     </svg>
-                    Download Hasil
+                    Download Result
                   </button>
                 )}
 
@@ -584,7 +584,7 @@ export default function App() {
                 {finalJob.status === "failed" && (
                   <div className="rounded-xl bg-red-900/20 border border-red-500/20 px-4 py-3">
                     <p className="text-sm font-medium text-red-400">
-                      Pemrosesan gagal
+                      Processing failed
                     </p>
                     {finalJob.errorMessage && (
                       <p className="text-xs text-red-500/70 mt-1">
@@ -599,7 +599,7 @@ export default function App() {
                   onClick={handleReset}
                   className="btn-secondary w-full py-3 rounded-2xl text-sm font-medium tracking-wide"
                 >
-                  Upload Gambar Lain
+                  Upload Another Image
                 </button>
               </div>
             )}
@@ -608,7 +608,7 @@ export default function App() {
 
         {/* Footer */}
         <p className="mt-8 text-xs text-slate-700 tracking-widest uppercase">
-          ✦ &nbsp;CFactory &nbsp;✦
+          ✦ &nbsp;Good Luck! &nbsp;✦
         </p>
       </div>
     </>
